@@ -44,7 +44,7 @@ def jobvision():
     # base url
     base_url = "https://jobvision.ir"
 
-    for page_num in range(1, 1000):
+    for page_num in range(1, 444):
         # get the entire website content
         driver.get(f"https://jobvision.ir/jobs?page={page_num}&sort=0")
         html = driver.page_source
@@ -94,8 +94,9 @@ def jobvision():
             locations.append(location)
             # Tag
             tags.append(None)
-            # Description
+            # Inside Jobs
             inside_jobs = BeautifulSoup(requests.get(link).content, "html.parser")
+            # Description
             description = inside_jobs.find("div", class_="col px-0 mr-2")
             if description:
                 description = description.text.replace("\xa0", "").strip()
