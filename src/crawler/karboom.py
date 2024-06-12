@@ -82,8 +82,9 @@ def karboom_crawler():
             locations.append(location)
             # Tags
             tags.append(None)
-            # Description
+            # Inside Jobs
             inside_jobs = BeautifulSoup(requests.get(link).content, "html.parser")
+            # Description
             temp = inside_jobs.find_all("div", class_="job-detail-box")
             for v in temp:
                 s = v.text.strip()
@@ -109,9 +110,11 @@ def karboom_crawler():
     return df
 
 
+"""
 # call the function
 df = karboom_crawler()
 # create csv directory for csv files
 os.makedirs("../../csv", exist_ok=True)
 # create csv file
 df.to_csv("../../csv/karboom.csv", index=False)
+"""
