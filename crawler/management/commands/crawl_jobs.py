@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from crawler import jobinja, quera
-from crawler.models import JobinjaJob, QueraJob
+from crawler import jobinja, karboom, quera
+from crawler.models import JobinjaJob, KarboomJob, QueraJob
 
 
 class Command(BaseCommand):
@@ -33,6 +33,18 @@ class Command(BaseCommand):
                 "experience",
                 "published",
                 "published_at",
+                "job_description",
+            ],
+        },
+        "karboom": {
+            "crawl": karboom.crawl,
+            "model": KarboomJob,
+            "fields": [
+                "title",
+                "company",
+                "location",
+                "published",
+                "salary",
                 "job_description",
             ],
         },

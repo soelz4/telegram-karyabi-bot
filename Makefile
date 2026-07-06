@@ -14,3 +14,6 @@ crawl-jobinja: ## Crawl 2 Jobinja pages into PostgreSQL
 
 crawl-quera: ## Crawl 2 Quera pages into PostgreSQL
 	.venv/bin/python manage.py crawl_jobs quera --max-pages 2 --delay 2
+
+crawl-karboom: ## Crawl 1 Karboom page into PostgreSQL
+	.venv/bin/python manage.py crawl_jobs karboom --max-pages 1 --delay 2
