@@ -16,7 +16,7 @@ def load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
-load_env(BASE_DIR / "docker" / ".env")
+load_env(BASE_DIR / ".env")
 
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
@@ -70,7 +70,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.getenv("POSTGRES_DB", "postgres"),
         "USER": os.getenv("POSTGRES_USER", "postgres"),
-        "PASSWORD": os.getenv("POSTGRES_PASSWORD", "1234"),
+        "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
         "HOST": os.getenv("POSTGRES_HOST", "localhost"),
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
