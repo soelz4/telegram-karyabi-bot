@@ -1,24 +1,14 @@
 import re
 import time
-from urllib.parse import urljoin, urlsplit, urlunsplit
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
+from crawler.utils import HEADERS, clean_text, clean_url, fetch_soup
+
 BASE_URL = "https://jobinja.ir"
 START_URL = "https://jobinja.ir/jobs"
-
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) "
-        "AppleWebKit/537.36 Chrome/120.0 Safari/537.36"
-    )
-}
-
-
-def clean_text(value: str) -> str:
-    return " ".join(value.split()) if value else ""
 
 
 def clean_lines(value: str) -> str:
@@ -29,15 +19,8 @@ def clean_lines(value: str) -> str:
     )
 
 
-def clean_url(url: str) -> str:
-    parts = urlsplit(url)
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
-
-
 def fetch_page(url: str, session: requests.Session) -> BeautifulSoup:
-    response = session.get(url, headers=HEADERS, timeout=20)
-    response.raise_for_status()
-    return BeautifulSoup(response.text, "lxml")
+    return fetch_soup(url, session, headers=HEADERS)
 
 
 def parse_jobs(soup: BeautifulSoup):
@@ -168,7 +151,3 @@ def crawl(max_pages: int = 2, delay_seconds: float = 2.0):
         time.sleep(delay_seconds)
 
     return all_jobs
-
-
-if __name__ == "__main__":
-    crawl(max_pages=2)

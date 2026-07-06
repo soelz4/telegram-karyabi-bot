@@ -1,8 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from crawler import jobinja, karboom, quera
-from crawler.models import JobinjaJob, KarboomJob, QueraJob
+from crawler import jobinja, jobvision, karboom, quera
+from crawler.models import JobinjaJob, JobvisionJob, KarboomJob, QueraJob
 
 
 class Command(BaseCommand):
@@ -33,7 +33,9 @@ class Command(BaseCommand):
                 "experience",
                 "published",
                 "published_at",
+                "tags",
                 "job_description",
+                "company_description",
             ],
         },
         "karboom": {
@@ -46,6 +48,27 @@ class Command(BaseCommand):
                 "published",
                 "salary",
                 "job_description",
+            ],
+        },
+        "jobvision": {
+            "crawl": jobvision.crawl,
+            "model": JobvisionJob,
+            "supports_start_page": True,
+            "fields": [
+                "jobvision_id",
+                "title",
+                "company",
+                "location",
+                "published",
+                "published_at",
+                "salary",
+                "experience",
+                "work_type",
+                "industry",
+                "benefits",
+                "tags",
+                "job_description",
+                "company_description",
             ],
         },
     }
@@ -70,21 +93,20 @@ class Command(BaseCommand):
             default=2.0,
             help="Delay in seconds for crawlers that support request throttling.",
         )
+        parser.add_argument(
+            "--start-page",
+            type=int,
+            default=1,
+            help="First page for crawlers that support explicit start pages.",
+        )
 
     def handle(self, *args, **options):
         source = options["source"]
         selected = self.crawlers if source == "all" else {source: self.crawlers[source]}
 
         for name, config in selected.items():
-            jobs = config["crawl"](
-                max_pages=options["max_pages"],
-                delay_seconds=options["delay"],
-            )
-            created_count, updated_count = self.save_jobs(
-                config["model"],
-                config["fields"],
-                jobs,
-            )
+            jobs = config["crawl"](**self.get_crawl_options(config, options))
+            created_count, updated_count = self.save_jobs(config, jobs)
 
             self.stdout.write(
                 self.style.SUCCESS(
@@ -93,8 +115,22 @@ class Command(BaseCommand):
                 )
             )
 
+    def get_crawl_options(self, config, options):
+        crawl_options = {
+            "max_pages": options["max_pages"],
+            "delay_seconds": options["delay"],
+        }
+        if config.get("supports_start_page"):
+            crawl_options["start_page"] = options["start_page"]
+        return crawl_options
+
     @transaction.atomic
-    def save_jobs(self, model, fields, jobs):
+    def save_jobs(self, config, jobs):
+        if not jobs:
+            return 0, 0
+
+        model = config["model"]
+        fields = config["fields"]
         urls = [job["url"] for job in jobs]
         existing_urls = set(
             model.objects.filter(url__in=urls).values_list("url", flat=True)

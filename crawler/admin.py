@@ -1,24 +1,31 @@
 from django.contrib import admin
 
-from crawler.models import JobinjaJob, KarboomJob, QueraJob
+from crawler.models import JobinjaJob, JobvisionJob, KarboomJob, QueraJob
+
+
+class JobAdmin(admin.ModelAdmin):
+    search_fields = ("title", "company", "location", "url")
 
 
 @admin.register(JobinjaJob)
-class JobinjaJobAdmin(admin.ModelAdmin):
+class JobinjaJobAdmin(JobAdmin):
     list_display = ("title", "company", "location", "published", "updated_at")
-    search_fields = ("title", "company", "location", "url")
     list_filter = ("published", "location")
 
 
 @admin.register(QueraJob)
-class QueraJobAdmin(admin.ModelAdmin):
+class QueraJobAdmin(JobAdmin):
     list_display = ("title", "company", "location", "experience", "published")
-    search_fields = ("title", "company", "location", "url")
     list_filter = ("experience", "published", "location")
 
 
 @admin.register(KarboomJob)
-class KarboomJobAdmin(admin.ModelAdmin):
+class KarboomJobAdmin(JobAdmin):
     list_display = ("title", "company", "location", "published", "salary")
-    search_fields = ("title", "company", "location", "url")
     list_filter = ("published", "location")
+
+
+@admin.register(JobvisionJob)
+class JobvisionJobAdmin(JobAdmin):
+    list_display = ("title", "company", "location", "published", "salary")
+    list_filter = ("published", "location", "industry")
