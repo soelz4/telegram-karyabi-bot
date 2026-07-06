@@ -9,5 +9,8 @@ postgres: ## Start PostgreSQL
 migrate: ## Run migrations
 	.venv/bin/python manage.py migrate
 
-crawl: ## Crawl 2 Jobinja pages into PostgreSQL
-	.venv/bin/python manage.py crawl_jobs --max-pages 2 --delay 2
+crawl-jobinja: ## Crawl 2 Jobinja pages into PostgreSQL
+	.venv/bin/python manage.py crawl_jobs jobinja --max-pages 2 --delay 2
+
+crawl-quera: ## Crawl 2 Quera pages into PostgreSQL
+	.venv/bin/python manage.py crawl_jobs quera --max-pages 2 --delay 2

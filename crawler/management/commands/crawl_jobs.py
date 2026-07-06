@@ -1,14 +1,51 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from crawler.jobinja import crawl
-from crawler.models import JobinjaJob
+from crawler import jobinja, quera
+from crawler.models import JobinjaJob, QueraJob
 
 
 class Command(BaseCommand):
-    help = "Crawl Jobinja and upsert jobs into crawler.jobinja."
+    help = "Crawl jobs and upsert them into PostgreSQL."
+
+    crawlers = {
+        "jobinja": {
+            "crawl": jobinja.crawl,
+            "model": JobinjaJob,
+            "fields": [
+                "title",
+                "company",
+                "location",
+                "contract",
+                "salary",
+                "experience",
+                "published",
+                "job_description",
+            ],
+        },
+        "quera": {
+            "crawl": quera.crawl,
+            "model": QueraJob,
+            "fields": [
+                "title",
+                "company",
+                "location",
+                "experience",
+                "published",
+                "published_at",
+                "job_description",
+            ],
+        },
+    }
 
     def add_arguments(self, parser):
+        parser.add_argument(
+            "source",
+            nargs="?",
+            choices=[*self.crawlers.keys(), "all"],
+            default="jobinja",
+            help="Crawler source to run.",
+        )
         parser.add_argument(
             "--max-pages",
             type=int,
@@ -23,54 +60,46 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        jobs = crawl(
-            max_pages=options["max_pages"],
-            delay_seconds=options["delay"],
-        )
-        created_count, updated_count = self.save_jobs(jobs)
+        source = options["source"]
+        selected = self.crawlers if source == "all" else {source: self.crawlers[source]}
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Saved Jobinja jobs to crawler.jobinja "
-                f"({created_count} created, {updated_count} updated)."
+        for name, config in selected.items():
+            jobs = config["crawl"](
+                max_pages=options["max_pages"],
+                delay_seconds=options["delay"],
             )
-        )
+            created_count, updated_count = self.save_jobs(
+                config["model"],
+                config["fields"],
+                jobs,
+            )
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Saved {name} jobs to crawler.{name} "
+                    f"({created_count} created, {updated_count} updated)."
+                )
+            )
 
     @transaction.atomic
-    def save_jobs(self, jobs):
+    def save_jobs(self, model, fields, jobs):
         urls = [job["url"] for job in jobs]
         existing_urls = set(
-            JobinjaJob.objects.filter(url__in=urls).values_list("url", flat=True)
+            model.objects.filter(url__in=urls).values_list("url", flat=True)
         )
         rows = [
-            JobinjaJob(
-                title=job.get("title", ""),
-                company=job.get("company", ""),
-                location=job.get("location", ""),
-                contract=job.get("contract", ""),
-                salary=job.get("salary", ""),
-                experience=job.get("experience", ""),
-                published=job.get("published", ""),
+            model(
                 url=job["url"],
-                job_description=job.get("job_description", ""),
+                **{field: job.get(field, "") for field in fields},
             )
             for job in jobs
         ]
 
-        JobinjaJob.objects.bulk_create(
+        model.objects.bulk_create(
             rows,
             update_conflicts=True,
             unique_fields=["url"],
-            update_fields=[
-                "title",
-                "company",
-                "location",
-                "contract",
-                "salary",
-                "experience",
-                "published",
-                "job_description",
-            ],
+            update_fields=fields,
         )
 
         created_count = len(set(urls) - existing_urls)
