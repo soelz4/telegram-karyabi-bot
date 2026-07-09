@@ -1,8 +1,4 @@
-import logging
-
 import requests
-
-logger = logging.getLogger(__name__)
 
 
 class TelegramClient:
@@ -14,7 +10,10 @@ class TelegramClient:
         self.session = requests.Session()
 
     def get_updates(self, *, offset: int | None = None, timeout: int = 30) -> list[dict]:
-        payload = {"timeout": timeout, "allowed_updates": ["message"]}
+        payload = {
+            "timeout": timeout,
+            "allowed_updates": ["message", "callback_query"],
+        }
         if offset is not None:
             payload["offset"] = offset
         return self.request("getUpdates", payload).get("result", [])
@@ -35,6 +34,49 @@ class TelegramClient:
         if reply_markup:
             payload["reply_markup"] = reply_markup
         return self.request("sendMessage", payload)
+
+    def edit_message_text(
+        self,
+        *,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        reply_markup: dict | None = None,
+        disable_web_page_preview: bool = True,
+    ) -> dict:
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+            "disable_web_page_preview": disable_web_page_preview,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        return self.request("editMessageText", payload)
+
+    def delete_message(self, *, chat_id: int, message_id: int) -> dict:
+        return self.request(
+            "deleteMessage",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+            },
+        )
+
+    def answer_callback_query(
+        self,
+        *,
+        callback_query_id: str,
+        text: str = "",
+        show_alert: bool = False,
+    ) -> dict:
+        payload = {
+            "callback_query_id": callback_query_id,
+            "show_alert": show_alert,
+        }
+        if text:
+            payload["text"] = text
+        return self.request("answerCallbackQuery", payload)
 
     def request(self, method: str, payload: dict) -> dict:
         response = self.session.post(

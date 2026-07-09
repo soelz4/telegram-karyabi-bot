@@ -31,6 +31,7 @@ RANKED_FIELDS = (
 
 @dataclass(frozen=True)
 class SearchResult:
+    id: int
     source: str
     source_label: str
     title: str
@@ -40,6 +41,15 @@ class SearchResult:
     url: str
     score: int
     updated_at: datetime
+    salary: str = ""
+    experience: str = ""
+    contract: str = ""
+    work_type: str = ""
+    industry: str = ""
+    tags: str = ""
+    benefits: str = ""
+    job_description: str = ""
+    company_description: str = ""
 
     @property
     def subtitle(self) -> str:
@@ -53,6 +63,7 @@ class SearchResult:
 
     def as_dict(self) -> dict:
         return {
+            "id": self.id,
             "source": self.source,
             "source_label": self.source_label,
             "title": self.title,
@@ -62,6 +73,15 @@ class SearchResult:
             "url": self.url,
             "score": self.score,
             "updated_at": self.updated_at,
+            "salary": self.salary,
+            "experience": self.experience,
+            "contract": self.contract,
+            "work_type": self.work_type,
+            "industry": self.industry,
+            "tags": self.tags,
+            "benefits": self.benefits,
+            "job_description": self.job_description,
+            "company_description": self.company_description,
             "subtitle": self.subtitle,
             "button_text": self.button_text,
         }
@@ -110,6 +130,7 @@ def search_source(
 
 def serialize_job(config: SourceConfig, job, score: int) -> SearchResult:
     return SearchResult(
+        id=job.id,
         source=config.name,
         source_label=config.label,
         title=job.title,
@@ -119,7 +140,29 @@ def serialize_job(config: SourceConfig, job, score: int) -> SearchResult:
         url=job.url,
         score=score,
         updated_at=job.updated_at,
+        salary=getattr(job, "salary", ""),
+        experience=getattr(job, "experience", ""),
+        contract=getattr(job, "contract", ""),
+        work_type=getattr(job, "work_type", ""),
+        industry=getattr(job, "industry", ""),
+        tags=getattr(job, "tags", ""),
+        benefits=getattr(job, "benefits", ""),
+        job_description=getattr(job, "job_description", ""),
+        company_description=getattr(job, "company_description", ""),
     )
+
+
+def get_job(source: str, job_id: int | str) -> dict | None:
+    config = SOURCE_CONFIGS.get(source)
+    if not config:
+        return None
+
+    try:
+        job = config.model.objects.get(id=job_id)
+    except (config.model.DoesNotExist, ValueError, TypeError):
+        return None
+
+    return serialize_job(config, job, score=0).as_dict()
 
 
 def score_job(job, terms: list[str]) -> int:

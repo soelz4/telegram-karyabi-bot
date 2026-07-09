@@ -33,6 +33,7 @@ class SearchServiceTests(SimpleTestCase):
 
     def test_search_result_includes_telegram_display_fields(self):
         result = services.SearchResult(
+            id=1,
             source="jobinja",
             source_label="Jobinja",
             title="Software Engineer",
@@ -60,6 +61,7 @@ def make_job(**values):
         "experience": "",
         "job_description": "",
         "company_description": "",
+        "id": 1,
     }
     defaults.update(values)
     fields = [SimpleNamespace(name=name) for name in defaults]

@@ -94,8 +94,11 @@ The `bot` app does not query crawler tables directly. It only calls:
 from crawler.services import search_jobs
 ```
 
-Supported messages:
+Supported commands:
 
-- `/start` shows a short intro.
+- `/start` shows a short intro and removes any old custom keyboard.
+- `/search` asks the user to type a job title or keyword.
 - `/help` shows search examples.
-- Any other text searches jobs and returns URL buttons for the original job pages.
+- Search results are selectable buttons with a Close button.
+- Selecting a job edits the result message into a full job detail view with Open job, Back, and Close buttons.
+- Open job redirects to the original website.
