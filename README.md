@@ -13,6 +13,7 @@ docker compose --env-file .env -f docker/docker-compose.yaml up -d postgres
 .venv/bin/python manage.py crawl_jobs karboom --max-pages 1 --delay 2
 .venv/bin/python manage.py crawl_jobs jobvision --max-pages 1 --delay 2
 .venv/bin/python manage.py crawl_jobs all --max-pages 1 --delay 2
+.venv/bin/python manage.py run_bot
 ```
 
 ## Dev data commands
@@ -77,3 +78,24 @@ Each result is a dict ready for Telegram rendering:
 ```
 
 Search normalizes Arabic/Persian character variants, searches all four source tables, ranks title matches highest, and caps `limit` at 50.
+
+## Telegram bot
+
+Create a Telegram bot with BotFather, put the token in `.env`, then run long polling:
+
+```bash
+TELEGRAM_BOT_TOKEN=123456:token-from-botfather
+.venv/bin/python manage.py run_bot
+```
+
+The `bot` app does not query crawler tables directly. It only calls:
+
+```python
+from crawler.services import search_jobs
+```
+
+Supported messages:
+
+- `/start` shows a short intro.
+- `/help` shows search examples.
+- Any other text searches jobs and returns URL buttons for the original job pages.

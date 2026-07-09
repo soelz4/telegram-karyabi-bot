@@ -29,3 +29,6 @@ crawl-refresh: ## Replace current dev data with one fresh page from every source
 
 clear-jobs: ## Delete all crawled jobs
 	.venv/bin/python manage.py clear_jobs all
+
+run-bot: ## Run Telegram bot long polling
+	.venv/bin/python manage.py run_bot
