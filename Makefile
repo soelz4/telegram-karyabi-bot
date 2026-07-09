@@ -18,8 +18,14 @@ crawl-quera: ## Crawl 2 Quera pages into PostgreSQL
 crawl-karboom: ## Crawl 1 Karboom page into PostgreSQL
 	.venv/bin/python manage.py crawl_jobs karboom --max-pages 1 --delay 2
 
-crawl-jobvision: ## Crawl Jobvision page 2 into PostgreSQL
-	.venv/bin/python manage.py crawl_jobs jobvision --start-page 2 --max-pages 1 --delay 2
+crawl-jobvision: ## Crawl 1 Jobvision page into PostgreSQL
+	.venv/bin/python manage.py crawl_jobs jobvision --max-pages 1 --delay 2
 
 crawl-all: ## Crawl one page from every source into PostgreSQL
 	.venv/bin/python manage.py crawl_jobs all --max-pages 1 --delay 2
+
+crawl-refresh: ## Replace current dev data with one fresh page from every source
+	.venv/bin/python manage.py crawl_jobs all --max-pages 1 --delay 2 --replace
+
+clear-jobs: ## Delete all crawled jobs
+	.venv/bin/python manage.py clear_jobs all

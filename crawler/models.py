@@ -1,4 +1,39 @@
 from django.db import models
+from django.db.models import Q
+
+
+SEARCH_FIELDS = (
+    "title",
+    "company",
+    "location",
+    "tags",
+    "industry",
+    "work_type",
+    "salary",
+    "experience",
+    "job_description",
+    "company_description",
+)
+
+
+class JobQuerySet(models.QuerySet):
+    def search(self, query: str):
+        query = " ".join((query or "").split())
+        if not query:
+            return self
+
+        fields = self.get_search_fields()
+        filters = Q()
+        for term in query.split():
+            term_filters = Q()
+            for field in fields:
+                term_filters |= Q(**{f"{field}__icontains": term})
+            filters &= term_filters
+        return self.filter(filters)
+
+    def get_search_fields(self) -> list[str]:
+        model_fields = {field.name for field in self.model._meta.fields}
+        return [field for field in SEARCH_FIELDS if field in model_fields]
 
 
 class JobinjaJob(models.Model):
@@ -13,6 +48,8 @@ class JobinjaJob(models.Model):
     job_description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = JobQuerySet.as_manager()
 
     class Meta:
         db_table = '"crawler"."jobinja"'
@@ -36,6 +73,8 @@ class QueraJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = JobQuerySet.as_manager()
+
     class Meta:
         db_table = '"crawler"."quera"'
         ordering = ["-created_at"]
@@ -54,6 +93,8 @@ class KarboomJob(models.Model):
     job_description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = JobQuerySet.as_manager()
 
     class Meta:
         db_table = '"crawler"."karboom"'
@@ -81,6 +122,8 @@ class JobvisionJob(models.Model):
     company_description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = JobQuerySet.as_manager()
 
     class Meta:
         db_table = '"crawler"."jobvision"'

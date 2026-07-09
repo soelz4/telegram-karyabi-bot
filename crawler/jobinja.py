@@ -1,14 +1,22 @@
+import logging
 import re
-import time
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 
-from crawler.utils import HEADERS, clean_text, clean_url, fetch_soup
+from crawler.utils import (
+    HEADERS,
+    clean_text,
+    clean_url,
+    collect_enriched_jobs,
+    fetch_soup,
+    sleep,
+)
 
 BASE_URL = "https://jobinja.ir"
 START_URL = "https://jobinja.ir/jobs"
+logger = logging.getLogger(__name__)
 
 
 def clean_lines(value: str) -> str:
@@ -136,18 +144,25 @@ def crawl(max_pages: int = 2, delay_seconds: float = 2.0):
 
     for page in range(1, max_pages + 1):
         url = f"{START_URL}?page={page}"
-        print(f"Crawling: {url}")
+        logger.info("Crawling: %s", url)
 
-        soup = fetch_page(url, session)
-        jobs = parse_jobs(soup)
+        try:
+            soup = fetch_page(url, session)
+            jobs = parse_jobs(soup)
+        except Exception as exc:
+            logger.warning("Skipping page %s: %s", url, exc)
+            sleep(delay_seconds)
+            continue
 
-        for job in jobs:
-            if job["url"] not in seen_urls:
-                seen_urls.add(job["url"])
-                print(f"  Fetching detail: {job['title']}")
-                all_jobs.append(enrich_job_details(job, session))
-                time.sleep(delay_seconds)
-
-        time.sleep(delay_seconds)
+        collect_enriched_jobs(
+            jobs=jobs,
+            all_jobs=all_jobs,
+            seen_urls=seen_urls,
+            session=session,
+            enrich_job=enrich_job_details,
+            delay_seconds=delay_seconds,
+            source_logger=logger,
+        )
+        sleep(delay_seconds)
 
     return all_jobs

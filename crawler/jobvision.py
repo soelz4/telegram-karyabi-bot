@@ -1,12 +1,21 @@
-import time
+import logging
 from urllib.parse import urljoin
 
 import requests
 
-from crawler.utils import HEADERS, clean_text, html_to_text, unique
+from crawler.utils import (
+    HEADERS,
+    REQUEST_TIMEOUT,
+    clean_text,
+    collect_enriched_jobs,
+    html_to_text,
+    sleep,
+    unique,
+)
 
 BASE_URL = "https://jobvision.ir"
 API_BASE_URL = "https://candidateapi.jobvision.ir/api/v1/JobPost"
+logger = logging.getLogger(__name__)
 
 JOBVISION_HEADERS = {
     **HEADERS,
@@ -24,7 +33,7 @@ def fetch_jobs_page(page: int, session: requests.Session, page_size: int = 20):
         f"{API_BASE_URL}/List",
         headers=JOBVISION_HEADERS,
         json={"requestedPage": page, "sortBy": 0, "pageSize": page_size},
-        timeout=20,
+        timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     data = response.json()
@@ -38,7 +47,7 @@ def fetch_job_detail(job_id: int, session: requests.Session):
         f"{API_BASE_URL}/Detail",
         headers=JOBVISION_HEADERS,
         params={"jobPostId": job_id},
-        timeout=20,
+        timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
     data = response.json()
@@ -136,26 +145,44 @@ def enrich_job_details(job: dict, session: requests.Session):
     return {**job, **parse_job_details(detail)}
 
 
-def crawl(max_pages: int = 1, delay_seconds: float = 2.0, start_page: int = 2):
+def crawl(max_pages: int = 1, delay_seconds: float = 2.0):
     all_jobs = []
     seen_urls = set()
     session = requests.Session()
 
-    for page in range(start_page, start_page + max_pages):
+    for page in range(1, max_pages + 1):
         url = f"{BASE_URL}/jobs?page={page}"
-        print(f"Crawling: {url}")
+        logger.info("Crawling: %s", url)
 
-        jobs = fetch_jobs_page(page, session)
-        for job_data in jobs:
-            job = parse_job(job_data)
-            if job["url"] in seen_urls:
-                continue
+        try:
+            jobs_data = fetch_jobs_page(page, session)
+            jobs = parse_jobs(jobs_data)
+        except Exception as exc:
+            logger.warning("Skipping page %s: %s", url, exc)
+            sleep(delay_seconds)
+            continue
 
-            seen_urls.add(job["url"])
-            print(f"  Fetching detail: {job['title']}")
-            all_jobs.append(enrich_job_details(job, session))
-            time.sleep(delay_seconds)
-
-        time.sleep(delay_seconds)
+        collect_enriched_jobs(
+            jobs=jobs,
+            all_jobs=all_jobs,
+            seen_urls=seen_urls,
+            session=session,
+            enrich_job=enrich_job_details,
+            delay_seconds=delay_seconds,
+            source_logger=logger,
+        )
+        sleep(delay_seconds)
 
     return all_jobs
+
+
+def parse_jobs(jobs_data: list[dict]) -> list[dict]:
+    jobs = []
+
+    for job_data in jobs_data:
+        try:
+            jobs.append(parse_job(job_data))
+        except Exception as exc:
+            logger.warning("Skipping malformed Jobvision row: %s", exc)
+
+    return jobs

@@ -1,155 +1,179 @@
-from django.core.management.base import BaseCommand
+import logging
+
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from crawler import jobinja, jobvision, karboom, quera
-from crawler.models import JobinjaJob, JobvisionJob, KarboomJob, QueraJob
+from crawler.sources import SOURCE_CONFIGS, SourceConfig
 
 
 class Command(BaseCommand):
-    help = "Crawl jobs and upsert them into PostgreSQL."
-
-    crawlers = {
-        "jobinja": {
-            "crawl": jobinja.crawl,
-            "model": JobinjaJob,
-            "fields": [
-                "title",
-                "company",
-                "location",
-                "contract",
-                "salary",
-                "experience",
-                "published",
-                "job_description",
-            ],
-        },
-        "quera": {
-            "crawl": quera.crawl,
-            "model": QueraJob,
-            "fields": [
-                "title",
-                "company",
-                "location",
-                "experience",
-                "published",
-                "published_at",
-                "tags",
-                "job_description",
-                "company_description",
-            ],
-        },
-        "karboom": {
-            "crawl": karboom.crawl,
-            "model": KarboomJob,
-            "fields": [
-                "title",
-                "company",
-                "location",
-                "published",
-                "salary",
-                "job_description",
-            ],
-        },
-        "jobvision": {
-            "crawl": jobvision.crawl,
-            "model": JobvisionJob,
-            "supports_start_page": True,
-            "fields": [
-                "jobvision_id",
-                "title",
-                "company",
-                "location",
-                "published",
-                "published_at",
-                "salary",
-                "experience",
-                "work_type",
-                "industry",
-                "benefits",
-                "tags",
-                "job_description",
-                "company_description",
-            ],
-        },
-    }
+    help = "Crawl jobs and sync them into source-specific tables."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "source",
             nargs="?",
-            choices=[*self.crawlers.keys(), "all"],
-            default="jobinja",
+            choices=[*SOURCE_CONFIGS.keys(), "all"],
+            default="all",
             help="Crawler source to run.",
         )
         parser.add_argument(
             "--max-pages",
             type=int,
             default=2,
-            help="Maximum pages for crawlers that support pagination options.",
+            help="Maximum pages for crawlers that support pagination.",
         )
         parser.add_argument(
             "--delay",
             type=float,
             default=2.0,
-            help="Delay in seconds for crawlers that support request throttling.",
+            help="Delay in seconds between crawler requests.",
         )
         parser.add_argument(
-            "--start-page",
-            type=int,
-            default=1,
-            help="First page for crawlers that support explicit start pages.",
+            "--replace",
+            action="store_true",
+            help="Delete selected table rows before inserting the latest crawl result.",
+        )
+        parser.add_argument(
+            "--prune",
+            action="store_true",
+            help="Delete selected table rows whose URLs were not seen in this crawl.",
+        )
+        parser.add_argument(
+            "--fail-fast",
+            action="store_true",
+            help="Stop at the first source failure instead of continuing.",
         )
 
     def handle(self, *args, **options):
-        source = options["source"]
-        selected = self.crawlers if source == "all" else {source: self.crawlers[source]}
+        self.validate_options(options)
+        self.configure_logging(options["verbosity"])
 
-        for name, config in selected.items():
-            jobs = config["crawl"](**self.get_crawl_options(config, options))
-            created_count, updated_count = self.save_jobs(config, jobs)
+        failures = []
+        configs = self.get_selected_configs(options["source"])
+
+        for config in configs:
+            try:
+                self.stdout.write(f"{config.name}: crawling...")
+                jobs = config.crawl(
+                    max_pages=options["max_pages"],
+                    delay_seconds=options["delay"],
+                )
+                created_count, updated_count, deleted_count = self.sync_jobs(
+                    config=config,
+                    jobs=jobs,
+                    replace=options["replace"],
+                    prune=options["prune"],
+                )
+            except Exception as exc:
+                failures.append((config.name, exc))
+                self.stderr.write(self.style.ERROR(f"{config.name}: failed: {exc}"))
+                if options["fail_fast"]:
+                    raise CommandError(f"{config.name}: failed: {exc}") from exc
+                continue
+
+            if not jobs:
+                self.stdout.write(
+                    self.style.WARNING(f"{config.name}: crawler returned no jobs.")
+                )
 
             self.stdout.write(
                 self.style.SUCCESS(
-                    f"Saved {name} jobs to crawler.{name} "
-                    f"({created_count} created, {updated_count} updated)."
+                    f"{config.table_name}: {created_count} created, "
+                    f"{updated_count} updated, {deleted_count} deleted."
                 )
             )
 
-    def get_crawl_options(self, config, options):
-        crawl_options = {
-            "max_pages": options["max_pages"],
-            "delay_seconds": options["delay"],
-        }
-        if config.get("supports_start_page"):
-            crawl_options["start_page"] = options["start_page"]
-        return crawl_options
+        if failures:
+            names = ", ".join(name for name, _ in failures)
+            raise CommandError(f"{len(failures)} crawler(s) failed: {names}")
+
+    def get_selected_configs(self, source):
+        if source == "all":
+            return SOURCE_CONFIGS.values()
+        return [SOURCE_CONFIGS[source]]
+
+    def validate_options(self, options) -> None:
+        if options["max_pages"] < 1:
+            raise CommandError("--max-pages must be at least 1.")
+        if options["delay"] < 0:
+            raise CommandError("--delay cannot be negative.")
+
+    def configure_logging(self, verbosity: int) -> None:
+        level = logging.INFO if verbosity >= 2 else logging.WARNING
+        logger = logging.getLogger("crawler")
+        logger.setLevel(level)
+        logger.propagate = False
+
+        if not logger.handlers:
+            logger.addHandler(logging.StreamHandler(self.stderr))
+
+        for handler in logger.handlers:
+            handler.setLevel(level)
 
     @transaction.atomic
-    def save_jobs(self, config, jobs):
-        if not jobs:
-            return 0, 0
-
-        model = config["model"]
-        fields = config["fields"]
+    def sync_jobs(
+        self,
+        *,
+        config: SourceConfig,
+        jobs: list[dict],
+        replace: bool,
+        prune: bool,
+    ):
+        jobs = self.dedupe_jobs(jobs)
         urls = [job["url"] for job in jobs]
-        existing_urls = set(
-            model.objects.filter(url__in=urls).values_list("url", flat=True)
-        )
-        rows = [
-            model(
-                url=job["url"],
-                **{field: job.get(field, "") for field in fields},
-            )
-            for job in jobs
-        ]
+        deleted_count = 0
 
-        model.objects.bulk_create(
-            rows,
-            update_conflicts=True,
-            unique_fields=["url"],
-            update_fields=fields,
+        if not jobs:
+            return 0, 0, 0
+
+        if replace:
+            deleted_count += self.delete_model_jobs(config.model)
+
+        existing_urls = set(
+            config.model.objects.filter(url__in=urls).values_list("url", flat=True)
         )
+
+        if jobs:
+            config.model.objects.bulk_create(
+                [self.build_row(config, job) for job in jobs],
+                update_conflicts=True,
+                unique_fields=["url"],
+                update_fields=list(config.fields),
+            )
+
+        if prune and urls and not replace:
+            deleted_count += self.delete_stale_jobs(config.model, urls)
 
         created_count = len(set(urls) - existing_urls)
         updated_count = len(set(urls) & existing_urls)
-        return created_count, updated_count
+        return created_count, updated_count, deleted_count
+
+    def dedupe_jobs(self, jobs: list[dict]) -> list[dict]:
+        deduped = []
+        seen_urls = set()
+
+        for job in jobs:
+            url = job.get("url")
+            title = job.get("title")
+            if not url or not title or url in seen_urls:
+                continue
+
+            seen_urls.add(url)
+            deduped.append(job)
+
+        return deduped
+
+    def build_row(self, config: SourceConfig, job: dict):
+        return config.model(
+            url=job["url"],
+            **{field: job.get(field) or "" for field in config.fields},
+        )
+
+    def delete_model_jobs(self, model) -> int:
+        deleted_count, _ = model.objects.all().delete()
+        return deleted_count
+
+    def delete_stale_jobs(self, model, urls: list[str]) -> int:
+        deleted_count, _ = model.objects.exclude(url__in=urls).delete()
+        return deleted_count

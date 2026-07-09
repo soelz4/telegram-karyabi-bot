@@ -5,6 +5,7 @@ from crawler.models import JobinjaJob, JobvisionJob, KarboomJob, QueraJob
 
 class JobAdmin(admin.ModelAdmin):
     search_fields = ("title", "company", "location", "url")
+    readonly_fields = ("created_at", "updated_at")
 
 
 @admin.register(JobinjaJob)
