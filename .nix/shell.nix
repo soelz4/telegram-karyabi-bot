@@ -8,6 +8,7 @@ pkgs.mkShell {
     pkgs.pkg-config
     pkgs.zlib
     pkgs.gcc
+    pkgs.tree
     pkgs.stdenv.cc.cc.lib
   ];
 
